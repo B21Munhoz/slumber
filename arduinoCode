@@ -1,0 +1,106 @@
+//--------------VARIÁVEIS DOS SENSORES------------------------
+
+int eyeRaw = 0;
+int heartRaw = 0;
+char buffr[5];
+int eyeVector[16];
+int heartVector[16];
+int i,j, count, count2 = 0;
+int vecMax, vecMax2 = 1;
+int trigger, trmax = 0;
+long heartMedia;
+unsigned long eyeAvg, heartAvg;
+unsigned long firstPoint = 0; //milliseconds
+unsigned long secondPoint = 0; //milliseconds
+unsigned int delta = 0; //delta entre as 2 marcações de ms
+unsigned long deltaSum = 0;
+
+void setup() {
+  // prepara os vetores de média móvel do movimento ocular e frequência cardíaca
+  for (i=0;i<16;i++){
+      eyeVector[i] = 0;
+      heartVector[i] = 0;
+  }
+
+  // estabelece o valor de gatilho trigger para saber quando houve um batimento cardíaco
+  for (i=0; i<2000; i++){
+      eyeRaw = analogRead(A4);
+      heartRaw = analogRead(A3);
+      if ((heartRaw > trmax)&&(i>1000)){
+        trmax = heartRaw;  
+      }
+      heartMedia += heartRaw;
+      delay(5);
+  }
+  heartMedia /= 2000;
+  trigger = ((trmax - heartMedia)*0.3)+heartMedia;
+
+  //inicializa a serial
+  Serial.begin(9600);
+ 
+}
+
+void loop() {
+      eyeRaw = analogRead(A4);
+      heartRaw = analogRead(A3);
+      if (heartRaw > trigger){
+        if(firstPoint == 0){ // primeira medida. Só há 1 ponto, portanto, não é possível estabelecer tempo entre batimentos ainda.
+          firstPoint = millis();
+        } else{
+          secondPoint = millis();
+          delta = (secondPoint - firstPoint);
+          if (delta > 249){ // se o tempo entre dois valores acima do trigger é menor que 250ms, o segundo valor faz parte do mesmo batimento que o primeiro.
+            firstPoint = secondPoint;
+            if (count < 16){
+              heartVector[count] = delta;
+              count++;
+            } else {
+              count = 0;
+              heartVector[count] = delta;
+              count++; 
+            }
+            
+            heartAvg = 0;
+            deltaSum = 0;
+            for (i=0;i<vecMax;i++){
+              deltaSum += heartVector[i];
+            }
+            heartAvg = 60000/(deltaSum/vecMax);
+            if (vecMax<16){
+              vecMax++;
+            }
+          }
+        }        
+      }
+      if (count2 < 16){
+        eyeVector[count2] = eyeRaw;
+        count2++;
+      } else {
+        count2 = 0;
+        eyeVector[count2] = eyeRaw;
+        count2++; 
+      }
+            
+      eyeAvg = 0;
+      for (i=0;i<vecMax2;i++){
+        eyeAvg += eyeVector[i];
+      }
+      eyeAvg /= vecMax2;
+      if (vecMax2<16){
+        vecMax2++;
+      }
+
+//----COMANDOS DO GOBETWEENO PARA ESCREVER NUM ARQUIVO TXT--------------
+
+
+      Serial.print("#S|LOGDATA|[");
+      Serial.print("bpm: ");
+      Serial.print(itoa((heartAvg), buffr, 10));
+      Serial.println("]#");
+      Serial.print("#S|LOGDATA|[");
+      Serial.print("Olho: ");
+      Serial.print(itoa((eyeAvg), buffr, 10));
+      Serial.println("]#");
+      delay(5);
+
+}
